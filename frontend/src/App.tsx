@@ -70,9 +70,8 @@ function Auth({ page, navigate, onLogin }: { page: 'login' | 'register'; navigat
   }
   return <main className="auth-page">
     <div className="auth-top"><Brand /></div>
-    <section className={`auth-card ${register ? 'register-card' : 'login-card'}`} aria-label={register ? '注册 EquityLens' : '登录 EquityLens'}>
+    <section className="auth-card" aria-label={register ? '注册 EquityLens' : '登录 EquityLens'}>
       <Brand />
-      {register && <div className="auth-heading"><h1>开启你的研究之旅</h1><p>创建账户，发现更清晰的市场视角。</p></div>}
       <form onSubmit={submit}>
         {register && <label className="field">用户名<input name="name" value={name} onChange={e => setName(e.target.value)} required minLength={2} maxLength={24} autoComplete="nickname" placeholder="怎么称呼你" /></label>}
         <label className="field">邮箱<input name="email" type="email" required autoComplete="email" placeholder="name@example.com" value={email} onChange={e => setEmail(e.target.value)} /></label>
@@ -95,8 +94,7 @@ function PreferencesPanel({ value, onClose, onSave }: { value: Preferences; onCl
     { key: 'growth' as const, title: '成长型', description: '关注成长逻辑，深入了解不确定性。', icon: TrendingUp },
   ]
   return <Modal title="理财偏好" onClose={onClose} drawer>
-    <div className="drawer-header"><div className="eyebrow">PERSONAL PREFERENCES</div><button className="icon-button" aria-label="关闭偏好设置" onClick={onClose}><X size={20} /></button></div>
-    <div className="drawer-intro"><span className="feature-icon"><Settings2 size={23} /></span><h2>让研究更懂你</h2><p>选择你的理财偏好，调整适合自己的研究视角。</p></div>
+    <div className="drawer-header"><h2>选择你的理财偏好</h2><button className="icon-button" aria-label="关闭偏好设置" onClick={onClose}><X size={20} /></button></div>
     <div className="drawer-content">
       <div className="section-label">风险偏好 <span>可随时调整</span></div>
       <div className="risk-options" role="radiogroup" aria-label="风险偏好">
@@ -281,7 +279,7 @@ export default function App() {
     <header className="floating-nav">
       <button className="brand-button" aria-label="EquityLens 首页" onClick={newChat}><Brand /></button>
       <nav className="main-nav" aria-label="主导航"><button className={page === 'chat' ? 'active' : ''} onClick={() => navigate('chat')}><MessageSquare size={17} /><span>Chat</span></button><button className={page === 'watchlist' ? 'active' : ''} onClick={() => navigate('watchlist')}><Star size={17} /><span>我的自选</span><span className="nav-count">{watchlist.length}</span></button></nav>
-      <div className="nav-right"><span className="prototype-pill"><span />研究预览</span><div className="account-wrap" ref={accountRef}><button className={`account-button ${accountOpen ? 'open' : ''}`} aria-label="用户菜单" aria-expanded={accountOpen} onClick={() => setAccountOpen(!accountOpen)}><UserRound size={18} /></button>
+      <div className="nav-right"><div className="account-wrap" ref={accountRef}><button className={`account-button ${accountOpen ? 'open' : ''}`} aria-label="用户菜单" aria-expanded={accountOpen} onClick={() => setAccountOpen(!accountOpen)}><UserRound size={18} /></button>
         {accountOpen && <div className="account-menu"><div className="account-info"><div className="avatar">{user.name.slice(0, 1).toUpperCase()}</div><div><strong>{user.name}</strong><span>{user.email}</span></div></div><div className="menu-separator" /><button onClick={() => { setAccountOpen(false); setPreferencesOpen(true) }}><SlidersHorizontal size={17} /><span>风险评估与理财偏好</span><ChevronRight size={15} /></button><button onClick={logout}><LogOut size={17} /><span>退出登录</span></button></div>}
       </div></div>
     </header>
@@ -303,12 +301,12 @@ export default function App() {
             {notesOpen && <div className="tree-children">{filteredConversations.filter(c => c.group === 'notes').map(conversationButton)}</div>}
             {chatSearch && filteredConversations.length === 0 && <p className="sidebar-empty">没有找到相关对话</p>}
           </div>
-          <div className="sidebar-bottom"><div className="trust-note"><ShieldCheck size={18} /><div><strong>让研究有据可循</strong><p>关注事实，也看见不确定性。</p></div></div><button className="profile-summary" onClick={() => setPreferencesOpen(true)}><span className="mini-avatar"><UserRound size={16} /></span><span><strong>{user.name}</strong><small>{preferences.configured ? '我的偏好' : '默认偏好'} · {riskLabels[preferences.risk]}</small></span><Settings2 size={16} /></button></div>
+          <div className="sidebar-bottom"><button className="profile-summary" onClick={() => setPreferencesOpen(true)}><span className="mini-avatar"><UserRound size={16} /></span><span><strong>{user.name}</strong><small>{preferences.configured ? '我的偏好' : '默认偏好'} · {riskLabels[preferences.risk]}</small></span><Settings2 size={16} /></button></div>
         </aside>
       </>}
 
       {page === 'chat' ? <main className={`chat-main ${active ? 'has-conversation' : ''}`}>
-        <div className="chat-topline"><div>{!sidebarOpen && <button className="icon-button" aria-label="展开侧栏" onClick={() => setSidebarOpen(true)}><PanelLeftOpen size={18} /></button>}<span>{active ? active.title : '研究助手'}</span><span className="topline-divider" /><span className="subtle-text">一个更清晰的市场视角</span></div><button className="view-preferences" onClick={() => setPreferencesOpen(true)}><ShieldCheck size={14} />{riskLabels[preferences.risk]}<ChevronDown size={13} /></button></div>
+        <div className="chat-topline"><div>{!sidebarOpen && <button className="icon-button" aria-label="展开侧栏" onClick={() => setSidebarOpen(true)}><PanelLeftOpen size={18} /></button>}<span>{active ? active.title : '研究助手'}</span></div><button className="view-preferences" onClick={() => setPreferencesOpen(true)}><ShieldCheck size={14} />{riskLabels[preferences.risk]}<ChevronDown size={13} /></button></div>
         {active ? <div className="message-scroll" aria-live="polite"><div className="message-list">{active.messages.map(message => <article className={`message ${message.role}`} key={message.id}>
           {message.role === 'assistant' && <div className="assistant-identity"><Logo /><strong>EquityLens</strong><span>{message.runId ? '固定年报样本 · 规则分析' : '演示回答'}</span></div>}
           {message.runId ? <ResearchRunMessage key={message.runId} runId={message.runId} onEvidence={setEvidenceId} onStatus={(id, busy) => setBusyRuns(current => current[id] === busy ? current : { ...current, [id]: busy })} onRetry={question => { setDraft(question); composerRef.current?.focus() }} /> : <div className="message-text">{message.text}</div>}
@@ -319,9 +317,9 @@ export default function App() {
           </div>
           <div className="starter-questions"><span>也可以问</span>{['分析贵州茅台最近两期的经营表现和主要风险'].map(text => <button key={text} onClick={() => { setDraft(text); composerRef.current?.focus() }}>{text}<ArrowRight size={13} /></button>)}</div>
         </div></div>}
-        <div className="composer-area">{serviceError && <p className="research-error" role="alert">{serviceError}</p>}<p className="research-scope">首个研究样本：贵州茅台 · 2025 / 2024 完整年度（“最近两期”采用此固定范围）</p><div className={`composer ${draft ? 'has-input' : ''}`}><textarea ref={composerRef} aria-label="输入研究问题" placeholder="提出一个问题，开启你的研究…" rows={2} maxLength={2000} value={draft} onChange={e => { setDraft(e.target.value); e.target.style.height = 'auto'; e.target.style.height = `${Math.min(e.target.scrollHeight, 150)}px` }} onKeyDown={onComposerKey} />
+        <div className="composer-area">{serviceError && <p className="research-error" role="alert">{serviceError}</p>}<div className={`composer ${draft ? 'has-input' : ''}`}><textarea ref={composerRef} aria-label="输入研究问题" placeholder="提出一个问题，开启你的研究…" rows={2} maxLength={2000} value={draft} onChange={e => { setDraft(e.target.value); e.target.style.height = 'auto'; e.target.style.height = `${Math.min(e.target.scrollHeight, 150)}px` }} onKeyDown={onComposerKey} />
           <div className="composer-toolbar"><div className="mode-wrap"><button className={`mode-button ${modeOpen ? 'selected' : ''}`} aria-expanded={modeOpen} onClick={() => setModeOpen(!modeOpen)}><Sparkles size={15} /><span>{mode}</span><ChevronDown size={12} /></button>{modeOpen && <div className="mode-menu">{['综合研究', '快速问答', '财报解读'].map(value => <button key={value} onClick={() => { setMode(value); setModeOpen(false) }}>{value}{mode === value && <Check size={14} />}</button>)}<small>模式切换为界面演示</small></div>}</div><div className="composer-right"><span>Enter 发送</span><button className="send-button" disabled={!draft.trim() || sending || activeBusy} aria-label="发送消息" onClick={sendMessage}>{sending ? <span className="spinner" /> : <ArrowUp size={19} />}</button></div></div>
-        </div><div className="composer-footnote"><ShieldCheck size={12} /><span>内容仅供研究参考</span><span className="footnote-dot">·</span><span>固定年报样本，尚未接入模型与实时数据</span></div></div>
+        </div><div className="composer-footnote"><ShieldCheck size={12} /><span>内容仅供研究参考，不构成投资建议。股市有风险，投资需谨慎</span></div></div>
       </main> : <main className="watchlist-page"><div className="watchlist-content"><div className="page-breadcrumb">我的工作台 <ChevronRight size={13} /> 自选股</div><div className="watchlist-heading"><div><div className="eyebrow">YOUR WATCHLIST</div><h1>关注值得研究的公司<span>.</span></h1><p>把线索留在这里，让研究持续发生。</p></div><button className="primary-button" onClick={() => setStockPickerOpen(true)}><Plus size={17} />添加自选股</button></div>
         <div className="watchlist-summary"><div><span className="summary-icon"><Star size={20} /></span><div><span>我的自选</span><strong>{watchlist.length}<small>家公司</small></strong></div></div><div><span className="summary-icon"><FolderOpen size={20} /></span><div><span>研究记录</span><strong>{conversations.length}<small>段对话</small></strong></div></div><div className="summary-tip"><ShieldCheck size={21} /><div><strong>研究从可靠的信息开始</strong><p>行情与涨跌幅暂留空，等待接入真实数据。</p></div></div></div>
         <section className="watchlist-table-card"><div className="table-toolbar"><div className="table-title">全部自选 <span>{watchlist.length}</span></div><div className="search-input compact"><Search size={15} /><input aria-label="搜索我的自选" placeholder="搜索名称或代码" value={watchSearch} onChange={e => setWatchSearch(e.target.value)} /></div></div><div className="table-scroll"><table><thead><tr><th>公司 / 代码</th><th>行业</th><th>最新价</th><th>涨跌幅</th><th>研究</th><th><span className="sr-only">操作</span></th></tr></thead><tbody>{stocks.filter(s => watchlist.includes(s.code) && `${s.name}${s.code}`.toLowerCase().includes(watchSearch.toLowerCase())).map(stock => <tr key={stock.code}><td><div className="stock-cell"><span className="stock-initial">{stock.initials}</span><span className="stock-name"><strong>{stock.name}</strong><span>{stock.code}</span></span></div></td><td><span className="sector-pill">{stock.sector}</span></td><td className="data-placeholder">—</td><td className="data-placeholder">—</td><td><button className="research-button" onClick={() => startResearch(stock)}><Sparkles size={14} />开始研究<ArrowUp size={13} /></button></td><td><button className="icon-button remove-stock" aria-label={`移除自选 ${stock.name}`} onClick={() => { updateWatchlist(watchlist.filter(code => code !== stock.code)); notify(`已移除${stock.name}`) }}><Trash2 size={16} /></button></td></tr>)}</tbody></table></div>
