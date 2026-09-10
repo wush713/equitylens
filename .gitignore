@@ -3,4 +3,12 @@ frontend/dist/
 frontend/*.tsbuildinfo
 frontend/.env*
 !frontend/.env.example
+backend/.venv/
+backend/.pytest_cache/
+backend/**/__pycache__/
+backend/data/
+backend/.env
+backend/*.egg-info/
+backend/build/
+backend/dist/
 .DS_Store

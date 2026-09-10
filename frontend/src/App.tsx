@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 import { ArrowRight, ArrowUp, BookOpen, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, Copy, Eye, EyeOff, FileText, Folder, FolderOpen, LogOut, MessageSquare, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, SquarePen, Star, Trash2, TrendingUp, UserRound, X } from 'lucide-react'
-import { createDemoReply, defaultPreferences, initialConversations, readStorage, riskLabels, stocks, writeStorage, type Conversation, type Preferences, type Stock, type User } from './data'
+import { defaultPreferences, initialConversations, readStorage, riskLabels, stocks, writeStorage, type Conversation, type Preferences, type Stock, type User } from './data'
+
+import { createSession, submitResearchMessage, listSessions, deleteSession, type RemoteSession } from './api/research'
+import { ResearchRunMessage } from './components/ResearchRunMessage'
+import { EvidenceDrawer } from './components/EvidenceDrawer'
+
+function remoteConversations(sessions: RemoteSession[]): Conversation[] {
+  return sessions.map(s => ({ id: s.id, remoteSessionId: s.id, title: s.title, group: 'recent',
+    messages: s.messages.map(m => ({ id: m.id, role: m.role, text: m.content, runId: m.role === 'assistant' ? m.run_id ?? undefined : undefined })) }))
+}
 
 type Page = 'login' | 'register' | 'chat' | 'watchlist'
 const uid = () => crypto.randomUUID()
@@ -124,7 +133,11 @@ export default function App() {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
-  const [pendingChat, setPendingChat] = useState<string | null>(null)
+  const [serviceError, setServiceError] = useState('')
+  const [evidenceId, setEvidenceId] = useState<string | null>(null)
+  const [busyRuns, setBusyRuns] = useState<Record<string, boolean>>({})
+  const accountEpoch = useRef(0)
+  const pendingSubmission = useRef<{ question: string; sessionId: string; key: string } | null>(null)
   const [accountOpen, setAccountOpen] = useState(false)
   const [preferencesOpen, setPreferencesOpen] = useState(false)
   const [stockPickerOpen, setStockPickerOpen] = useState(false)
@@ -138,14 +151,18 @@ export default function App() {
   const [toast, setToast] = useState('')
   const [copiedId, setCopiedId] = useState('')
   const [watchSearch, setWatchSearch] = useState('')
-  const replyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const accountRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const chatBottomRef = useRef<HTMLDivElement>(null)
   const conversationsRef = useRef<Conversation[]>(initialConversations)
   const active = conversations.find(c => c.id === activeId)
+  const activeBusy = active?.messages.some(m => m.runId && busyRuns[m.runId]) ?? false
 
+  function activate(id: string | null) {
+    setActiveId(id)
+    if (user) writeStorage(`equitylens.active.${user.email.toLowerCase()}`, id)
+  }
   function navigate(next: Page) { window.location.hash = `/${next}`; setPage(next); setAccountOpen(false) }
   function notify(text: string) { clearTimeout(toastTimer.current); setToast(text); toastTimer.current = setTimeout(() => setToast(''), 3000) }
 
@@ -159,13 +176,30 @@ export default function App() {
     if (user && (page === 'login' || page === 'register')) navigate('chat')
   }, [user, page])
   useEffect(() => {
+    const epoch = ++accountEpoch.current
     if (!user) return
     const key = user.email.toLowerCase()
+    setServiceError('')
+    setBusyRuns({})
+    const pending = readStorage<{ question: string; sessionId: string; key: string } | null>(`equitylens.pending.${key}`, null)
+    pendingSubmission.current = pending
+    if (pending) setDraft(pending.question)
+    setActiveId(readStorage<string | null>(`equitylens.active.${key}`, null))
     setPreferences(readStorage(`equitylens.preferences.${key}`, defaultPreferences))
     const storedConversations = readStorage(`equitylens.conversations.${key}`, initialConversations)
     conversationsRef.current = storedConversations
     setConversations(storedConversations)
     setWatchlist(readStorage(`equitylens.watchlist.${key}`, stocks.slice(0, 3).map(s => s.code)))
+    listSessions().then(sessions => {
+      if (epoch !== accountEpoch.current) return
+      const merged = [...remoteConversations(sessions), ...storedConversations.filter(c => !c.remoteSessionId)]
+      conversationsRef.current = merged
+      setConversations(merged)
+      writeStorage(`equitylens.conversations.${key}`, merged)
+    }).catch(() => {
+      if (epoch === accountEpoch.current) setServiceError('后端暂未连接。请启动 API 和 Worker；现有原型记录仍可查看。')
+    })
+    return () => { ++accountEpoch.current }
   }, [user])
   useEffect(() => { chatBottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }) }, [active?.messages.length, sending, activeId])
   useEffect(() => {
@@ -174,7 +208,7 @@ export default function App() {
     document.addEventListener('mousedown', outside); document.addEventListener('keydown', escape)
     return () => { document.removeEventListener('mousedown', outside); document.removeEventListener('keydown', escape) }
   }, [])
-  useEffect(() => () => { clearTimeout(replyTimer.current); clearTimeout(toastTimer.current) }, [])
+  useEffect(() => () => { clearTimeout(toastTimer.current) }, [])
 
   function saveConversations(next: Conversation[]) {
     conversationsRef.current = next
@@ -183,26 +217,52 @@ export default function App() {
   }
   function login(next: User) { writeStorage('equitylens.user', next); setUser(next); navigate('chat') }
   function logout() {
-    clearTimeout(replyTimer.current); setSending(false); setPendingChat(null)
-    writeStorage('equitylens.user', null); setUser(null); setActiveId(null); setDraft(''); navigate('login')
+    ++accountEpoch.current; setSending(false); setEvidenceId(null)
+    writeStorage('equitylens.user', null); setUser(null); activate(null); setDraft(''); navigate('login')
   }
-  function newChat() { setActiveId(null); setDraft(''); navigate('chat'); setTimeout(() => composerRef.current?.focus(), 50) }
-  function selectChat(id: string) { setActiveId(id); setDraft(''); navigate('chat'); if (window.innerWidth < 760) setSidebarOpen(false) }
-  function startResearch(stock: Stock) { setActiveId(null); setDraft(`帮我分析${stock.name}的经营表现和主要风险。`); navigate('chat'); setTimeout(() => composerRef.current?.focus(), 50) }
+  function newChat() { activate(null); setDraft(''); navigate('chat'); setTimeout(() => composerRef.current?.focus(), 50) }
+  function selectChat(id: string) { activate(id); setDraft(''); navigate('chat'); if (window.innerWidth < 760) setSidebarOpen(false) }
+  function startResearch(stock: Stock) { activate(null); setDraft(`分析${stock.name}最近两期的经营表现和主要风险。`); navigate('chat'); setTimeout(() => composerRef.current?.focus(), 50) }
   function updateWatchlist(next: string[]) { setWatchlist(next); if (user) writeStorage(`equitylens.watchlist.${user.email.toLowerCase()}`, next) }
-  function sendMessage() {
+  async function sendMessage() {
     const question = draft.trim()
-    if (!question || sending || !user) return
-    const id = activeId ?? uid()
-    const message = { id: uid(), role: 'user' as const, text: question }
-    const next = active ? conversations.map(c => c.id === id ? { ...c, messages: [...c.messages, message] } : c) : [{ id, title: question.slice(0, 22), group: 'recent' as const, messages: [message] }, ...conversations]
-    saveConversations(next); setActiveId(id); setDraft(''); setSending(true); setPendingChat(id)
-    if (composerRef.current) composerRef.current.style.height = ''
-    replyTimer.current = setTimeout(() => {
-      const complete = conversationsRef.current.map(c => c.id === id ? { ...c, messages: [...c.messages, { id: uid(), role: 'assistant' as const, text: createDemoReply(question) }] } : c)
-      saveConversations(complete)
-      setSending(false); setPendingChat(null)
-    }, 1000)
+    if (!question || sending || activeBusy || !user) return
+    const epoch = accountEpoch.current
+    const account = user.email.toLowerCase()
+    setSending(true); setServiceError('')
+    try {
+      let pending = pendingSubmission.current
+      if (!pending || pending.question !== question || (active?.remoteSessionId && active.remoteSessionId !== pending.sessionId)) {
+        const sessionId = active?.remoteSessionId ?? (await createSession(question.slice(0, 80))).id
+        pending = { question, sessionId, key: uid() }
+        pendingSubmission.current = pending
+        writeStorage(`equitylens.pending.${account}`, pending)
+      }
+      await submitResearchMessage(pending.sessionId, question, pending.key)
+      if (epoch !== accountEpoch.current) return
+      const sessionId = pending.sessionId
+      pendingSubmission.current = null
+      writeStorage(`equitylens.pending.${account}`, null)
+      const sessions = await listSessions()
+      if (epoch !== accountEpoch.current) return
+      saveConversations([...remoteConversations(sessions), ...conversationsRef.current.filter(c => !c.remoteSessionId)])
+      activate(sessionId); setDraft('')
+      if (composerRef.current) composerRef.current.style.height = ''
+    } catch (reason) {
+      if (epoch === accountEpoch.current) setServiceError(reason instanceof Error ? reason.message : '提交失败，请确认后端已启动')
+    } finally {
+      if (epoch === accountEpoch.current) setSending(false)
+    }
+  }
+  async function removeConversation(c: Conversation) {
+    const epoch = accountEpoch.current
+    try {
+      if (c.remoteSessionId) await deleteSession(c.remoteSessionId)
+      if (epoch !== accountEpoch.current) return
+      saveConversations(conversationsRef.current.filter(x => x.id !== c.id))
+      if (activeId === c.id) activate(null)
+      notify('对话已删除')
+    } catch (reason) { notify(reason instanceof Error ? reason.message : '删除失败') }
   }
   function onComposerKey(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); sendMessage() }
@@ -213,7 +273,7 @@ export default function App() {
   const filteredConversations = conversations.filter(c => c.title.toLowerCase().includes(chatSearch.toLowerCase()))
   const conversationButton = (c: Conversation) => <div className={`tree-conversation ${activeId === c.id && page === 'chat' ? 'active' : ''}`} key={c.id}>
     <button className="conversation-select" onClick={() => selectChat(c.id)} title={c.title}><MessageSquare size={15} /><span>{c.title}</span></button>
-    <button className="conversation-delete" aria-label={`删除对话 ${c.title}`} onClick={() => { if (pendingChat === c.id) { clearTimeout(replyTimer.current); setSending(false); setPendingChat(null) } saveConversations(conversations.filter(x => x.id !== c.id)); if (activeId === c.id) setActiveId(null); notify('对话已删除') }}><Trash2 size={13} /></button>
+    <button className="conversation-delete" aria-label={`删除对话 ${c.title}`} onClick={() => void removeConversation(c)}><Trash2 size={13} /></button>
   </div>
 
   if (!user || page === 'login' || page === 'register') return <Auth key={page} page={page === 'register' ? 'register' : 'login'} navigate={navigate} onLogin={login} />
@@ -222,7 +282,7 @@ export default function App() {
     <header className="floating-nav">
       <button className="brand-button" aria-label="EquityLens 首页" onClick={newChat}><Brand /></button>
       <nav className="main-nav" aria-label="主导航"><button className={page === 'chat' ? 'active' : ''} onClick={() => navigate('chat')}><MessageSquare size={17} /><span>Chat</span></button><button className={page === 'watchlist' ? 'active' : ''} onClick={() => navigate('watchlist')}><Star size={17} /><span>我的自选</span><span className="nav-count">{watchlist.length}</span></button></nav>
-      <div className="nav-right"><span className="prototype-pill"><span />交互原型</span><div className="account-wrap" ref={accountRef}><button className={`account-button ${accountOpen ? 'open' : ''}`} aria-label="用户菜单" aria-expanded={accountOpen} onClick={() => setAccountOpen(!accountOpen)}><UserRound size={18} /></button>
+      <div className="nav-right"><span className="prototype-pill"><span />研究预览</span><div className="account-wrap" ref={accountRef}><button className={`account-button ${accountOpen ? 'open' : ''}`} aria-label="用户菜单" aria-expanded={accountOpen} onClick={() => setAccountOpen(!accountOpen)}><UserRound size={18} /></button>
         {accountOpen && <div className="account-menu"><div className="account-info"><div className="avatar">{user.name.slice(0, 1).toUpperCase()}</div><div><strong>{user.name}</strong><span>{user.email}</span></div></div><div className="menu-separator" /><button onClick={() => { setAccountOpen(false); setPreferencesOpen(true) }}><SlidersHorizontal size={17} /><span>风险评估与理财偏好</span><ChevronRight size={15} /></button><button onClick={logout}><LogOut size={17} /><span>退出登录</span></button></div>}
       </div></div>
     </header>
@@ -251,18 +311,18 @@ export default function App() {
       {page === 'chat' ? <main className={`chat-main ${active ? 'has-conversation' : ''}`}>
         <div className="chat-topline"><div>{!sidebarOpen && <button className="icon-button" aria-label="展开侧栏" onClick={() => setSidebarOpen(true)}><PanelLeftOpen size={18} /></button>}<span>{active ? active.title : '研究助手'}</span><span className="topline-divider" /><span className="subtle-text">一个更清晰的市场视角</span></div><button className="view-preferences" onClick={() => setPreferencesOpen(true)}><ShieldCheck size={14} />{riskLabels[preferences.risk]}<ChevronDown size={13} /></button></div>
         {active ? <div className="message-scroll" aria-live="polite"><div className="message-list">{active.messages.map(message => <article className={`message ${message.role}`} key={message.id}>
-          {message.role === 'assistant' && <div className="assistant-identity"><Logo /><strong>EquityLens</strong><span>演示回答</span></div>}
-          <div className="message-text">{message.text}</div>
-          {message.role === 'assistant' && <div className="message-actions"><button aria-label="复制回答" onClick={() => copyMessage(message.id, message.text)}>{copiedId === message.id ? <CheckCheck size={15} /> : <Copy size={15} />}</button><span>未连接实时数据</span></div>}
-        </article>)}{sending && pendingChat === activeId && <div className="thinking"><Logo /><span>正在整理演示回答</span><span className="typing-dots"><i /><i /><i /></span></div>}<div ref={chatBottomRef} /></div></div> : <div className="welcome-area"><div className="welcome-inner"><div className="hero-brand"><Logo large /><span className="hero-kicker">看见数据背后的逻辑</span></div><h1>从一个好问题，<span>开始研究。</span></h1><p className="hero-description">关于公司、财报与市场，和 EquityLens 一起看得更清楚。</p>
+          {message.role === 'assistant' && <div className="assistant-identity"><Logo /><strong>EquityLens</strong><span>{message.runId ? '固定年报样本 · 规则分析' : '演示回答'}</span></div>}
+          {message.runId ? <ResearchRunMessage key={message.runId} runId={message.runId} onEvidence={setEvidenceId} onStatus={(id, busy) => setBusyRuns(current => current[id] === busy ? current : { ...current, [id]: busy })} onRetry={question => { setDraft(question); composerRef.current?.focus() }} /> : <div className="message-text">{message.text}</div>}
+          {message.role === 'assistant' && !message.runId && <div className="message-actions"><button aria-label="复制回答" onClick={() => copyMessage(message.id, message.text)}>{copiedId === message.id ? <CheckCheck size={15} /> : <Copy size={15} />}</button><span>未连接实时数据</span></div>}
+        </article>)}<div ref={chatBottomRef} /></div></div> : <div className="welcome-area"><div className="welcome-inner"><div className="hero-brand"><Logo large /><span className="hero-kicker">看见数据背后的逻辑</span></div><h1>从一个好问题，<span>开始研究。</span></h1><p className="hero-description">关于公司、财报与市场，和 EquityLens 一起看得更清楚。</p>
           <div className="suggestion-grid">
-            {[{ icon: TrendingUp, title: '读懂一家公司', text: '经营表现、竞争优势与潜在风险', prompt: '研究一家公司的基本面，可以从哪里开始？' }, { icon: FileText, title: '拆解一份财报', text: '从关键指标，理解真实经营', prompt: '如何读懂经营现金流和净利润的关系？' }, { icon: BookOpen, title: '建立研究视角', text: '把复杂的金融概念，讲得简单', prompt: '市盈率是什么意思，应该怎么看？' }].map(({ icon: Icon, title, text, prompt }) => <button className="suggestion-card" key={title} onClick={() => { setDraft(prompt); composerRef.current?.focus() }}><span className="suggestion-icon"><Icon size={20} /></span><strong>{title}</strong><p>{text}</p><ArrowUp size={15} className="suggestion-arrow" /></button>)}
+            {[{ icon: TrendingUp, title: '研究贵州茅台', text: '2025 / 2024 年度经营表现与风险', prompt: '分析贵州茅台最近两期的经营表现和主要风险' }, { icon: FileText, title: '核对经营指标', text: '查看原始数字、单位与同比公式', prompt: '分析贵州茅台两期年度经营指标和风险' }, { icon: BookOpen, title: '追溯年报证据', text: '结合现金流说明，理解分析边界', prompt: '分析贵州茅台2025年报的经营表现和主要风险' }].map(({ icon: Icon, title, text, prompt }) => <button className="suggestion-card" key={title} onClick={() => { setDraft(prompt); composerRef.current?.focus() }}><span className="suggestion-icon"><Icon size={20} /></span><strong>{title}</strong><p>{text}</p><ArrowUp size={15} className="suggestion-arrow" /></button>)}
           </div>
-          <div className="starter-questions"><span>也可以问</span>{['如何开始股票研究？', '财报里哪些指标值得关注？'].map(text => <button key={text} onClick={() => { setDraft(text); composerRef.current?.focus() }}>{text}<ArrowRight size={13} /></button>)}</div>
+          <div className="starter-questions"><span>也可以问</span>{['分析贵州茅台最近两期的经营表现和主要风险'].map(text => <button key={text} onClick={() => { setDraft(text); composerRef.current?.focus() }}>{text}<ArrowRight size={13} /></button>)}</div>
         </div></div>}
-        <div className="composer-area"><div className={`composer ${draft ? 'has-input' : ''}`}><textarea ref={composerRef} aria-label="输入研究问题" placeholder="提出一个问题，开启你的研究…" rows={2} maxLength={4000} value={draft} onChange={e => { setDraft(e.target.value); e.target.style.height = 'auto'; e.target.style.height = `${Math.min(e.target.scrollHeight, 150)}px` }} onKeyDown={onComposerKey} />
-          <div className="composer-toolbar"><div className="mode-wrap"><button className={`mode-button ${modeOpen ? 'selected' : ''}`} aria-expanded={modeOpen} onClick={() => setModeOpen(!modeOpen)}><Sparkles size={15} /><span>{mode}</span><ChevronDown size={12} /></button>{modeOpen && <div className="mode-menu">{['综合研究', '快速问答', '财报解读'].map(value => <button key={value} onClick={() => { setMode(value); setModeOpen(false) }}>{value}{mode === value && <Check size={14} />}</button>)}<small>模式切换为界面演示</small></div>}</div><div className="composer-right"><span>Enter 发送</span><button className="send-button" disabled={!draft.trim() || sending} aria-label="发送消息" onClick={sendMessage}>{sending ? <span className="spinner" /> : <ArrowUp size={19} />}</button></div></div>
-        </div><div className="composer-footnote"><ShieldCheck size={12} /><span>内容仅供研究参考</span><span className="footnote-dot">·</span><span>当前为交互原型，非实时金融数据</span></div></div>
+        <div className="composer-area">{serviceError && <p className="research-error" role="alert">{serviceError}</p>}<p className="research-scope">首个研究样本：贵州茅台 · 2025 / 2024 完整年度（“最近两期”采用此固定范围）</p><div className={`composer ${draft ? 'has-input' : ''}`}><textarea ref={composerRef} aria-label="输入研究问题" placeholder="提出一个问题，开启你的研究…" rows={2} maxLength={2000} value={draft} onChange={e => { setDraft(e.target.value); e.target.style.height = 'auto'; e.target.style.height = `${Math.min(e.target.scrollHeight, 150)}px` }} onKeyDown={onComposerKey} />
+          <div className="composer-toolbar"><div className="mode-wrap"><button className={`mode-button ${modeOpen ? 'selected' : ''}`} aria-expanded={modeOpen} onClick={() => setModeOpen(!modeOpen)}><Sparkles size={15} /><span>{mode}</span><ChevronDown size={12} /></button>{modeOpen && <div className="mode-menu">{['综合研究', '快速问答', '财报解读'].map(value => <button key={value} onClick={() => { setMode(value); setModeOpen(false) }}>{value}{mode === value && <Check size={14} />}</button>)}<small>模式切换为界面演示</small></div>}</div><div className="composer-right"><span>Enter 发送</span><button className="send-button" disabled={!draft.trim() || sending || activeBusy} aria-label="发送消息" onClick={sendMessage}>{sending ? <span className="spinner" /> : <ArrowUp size={19} />}</button></div></div>
+        </div><div className="composer-footnote"><ShieldCheck size={12} /><span>内容仅供研究参考</span><span className="footnote-dot">·</span><span>固定年报样本，尚未接入模型与实时数据</span></div></div>
       </main> : <main className="watchlist-page"><div className="watchlist-content"><div className="page-breadcrumb">我的工作台 <ChevronRight size={13} /> 自选股</div><div className="watchlist-heading"><div><div className="eyebrow">YOUR WATCHLIST</div><h1>关注值得研究的公司<span>.</span></h1><p>把线索留在这里，让研究持续发生。</p></div><button className="primary-button" onClick={() => setStockPickerOpen(true)}><Plus size={17} />添加自选股</button></div>
         <div className="watchlist-summary"><div><span className="summary-icon"><Star size={20} /></span><div><span>我的自选</span><strong>{watchlist.length}<small>家公司</small></strong></div></div><div><span className="summary-icon"><FolderOpen size={20} /></span><div><span>研究记录</span><strong>{conversations.length}<small>段对话</small></strong></div></div><div className="summary-tip"><ShieldCheck size={21} /><div><strong>研究从可靠的信息开始</strong><p>行情与涨跌幅暂留空，等待接入真实数据。</p></div></div></div>
         <section className="watchlist-table-card"><div className="table-toolbar"><div className="table-title">全部自选 <span>{watchlist.length}</span></div><div className="search-input compact"><Search size={15} /><input aria-label="搜索我的自选" placeholder="搜索名称或代码" value={watchSearch} onChange={e => setWatchSearch(e.target.value)} /></div></div><div className="table-scroll"><table><thead><tr><th>公司 / 代码</th><th>行业</th><th>最新价</th><th>涨跌幅</th><th>研究</th><th><span className="sr-only">操作</span></th></tr></thead><tbody>{stocks.filter(s => watchlist.includes(s.code) && `${s.name}${s.code}`.toLowerCase().includes(watchSearch.toLowerCase())).map(stock => <tr key={stock.code}><td><div className="stock-cell"><span className="stock-initial">{stock.initials}</span><span className="stock-name"><strong>{stock.name}</strong><span>{stock.code}</span></span></div></td><td><span className="sector-pill">{stock.sector}</span></td><td className="data-placeholder">—</td><td className="data-placeholder">—</td><td><button className="research-button" onClick={() => startResearch(stock)}><Sparkles size={14} />开始研究<ArrowUp size={13} /></button></td><td><button className="icon-button remove-stock" aria-label={`移除自选 ${stock.name}`} onClick={() => { updateWatchlist(watchlist.filter(code => code !== stock.code)); notify(`已移除${stock.name}`) }}><Trash2 size={16} /></button></td></tr>)}</tbody></table></div>
@@ -271,6 +331,7 @@ export default function App() {
         <div className="watchlist-bottom"><BookOpen size={17} /><span>从一份财报、一个问题开始，逐步建立自己的研究记录。</span><button onClick={newChat}>去聊一聊 <ArrowRight size={14} /></button></div>
       </div></main>}
     </div>
+    {evidenceId && <EvidenceDrawer key={evidenceId} evidenceId={evidenceId} onClose={() => setEvidenceId(null)} />}
     {preferencesOpen && <PreferencesPanel value={preferences} onClose={() => setPreferencesOpen(false)} onSave={next => { setPreferences(next); writeStorage(`equitylens.preferences.${user.email.toLowerCase()}`, next); setPreferencesOpen(false); notify('理财偏好已保存') }} />}
     {stockPickerOpen && <StockPicker selected={watchlist} onClose={() => setStockPickerOpen(false)} onAdd={stock => { updateWatchlist([...watchlist, stock.code]); notify(`已添加${stock.name}`) }} />}
     {toast && <div role="status" className="toast"><Check size={16} />{toast}</div>}

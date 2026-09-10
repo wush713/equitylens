@@ -1,0 +1,59 @@
+{
+  "evidence_id": "moutai-2025-annual-report-main-data",
+  "company": "贵州茅台酒股份有限公司",
+  "stock_code": "600519.SH",
+  "source": {
+    "provider": "贵州茅台股份有限公司官网",
+    "title": "贵州茅台酒股份有限公司2025年年度报告",
+    "url": "https://www.moutaichina.com/mtgf/articleFileDir/2026-04/17/1b9fae59825c41bf9a776892a00565f7.pdf",
+    "published_at": "2026-04-17",
+    "locator": "第6页，第二节七（一）主要会计数据及（二）主要财务指标"
+  },
+  "periods": {
+    "current": "2025年度",
+    "previous": "2024年度"
+  },
+  "metrics": {
+    "revenue": {
+      "label": "营业收入",
+      "unit": "人民币元",
+      "current": 168838102514.79,
+      "previous": 170899152276.34,
+      "reported_change_pct": -1.21
+    },
+    "net_profit_parent": {
+      "label": "归属于上市公司股东的净利润",
+      "unit": "人民币元",
+      "current": 82320067101.68,
+      "previous": 86228146421.62,
+      "reported_change_pct": -4.53
+    },
+    "operating_cash_flow": {
+      "label": "经营活动产生的现金流量净额",
+      "unit": "人民币元",
+      "current": 61522204989.35,
+      "previous": 92463692168.43,
+      "reported_change_pct": -33.46
+    },
+    "net_assets_parent": {
+      "label": "归属于上市公司股东的净资产",
+      "unit": "人民币元",
+      "current": 244637811032.18,
+      "previous": 233105984399.47,
+      "reported_change_pct": 4.95
+    },
+    "weighted_roe": {
+      "label": "加权平均净资产收益率",
+      "unit": "百分比",
+      "current": 32.53,
+      "previous": 36.02,
+      "reported_change_percentage_points": -3.49
+    }
+  },
+  "notes": [
+    {
+      "topic": "operating_cash_flow",
+      "text": "经营活动产生的现金流量净额减少主要是本期公司控股子公司贵州茅台集团财务有限公司吸收集团公司成员单位存款减少及不可随时支取的同业存款增加。"
+    }
+  ]
+}

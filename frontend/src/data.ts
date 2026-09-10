@@ -1,7 +1,9 @@
 export type User = { name: string; email: string }
 export type Preferences = { risk: 'conservative' | 'balanced' | 'growth'; horizon: string; knowledge: string; configured: boolean }
-export type Message = { id: string; role: 'user' | 'assistant'; text: string }
-export type Conversation = { id: string; title: string; group: 'company' | 'notes' | 'recent'; messages: Message[] }
+import type { ResearchAnswer } from './api/types'
+
+export type Message = { id: string; role: 'user' | 'assistant'; text: string; runId?: string; answer?: ResearchAnswer }
+export type Conversation = { id: string; title: string; group: 'company' | 'notes' | 'recent'; messages: Message[]; remoteSessionId?: string }
 export type Stock = { code: string; name: string; sector: string; initials: string }
 
 export const defaultPreferences: Preferences = { risk: 'conservative', horizon: '一年以上', knowledge: '刚刚开始了解', configured: false }
