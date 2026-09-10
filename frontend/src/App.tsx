@@ -69,10 +69,10 @@ function Auth({ page, navigate, onLogin }: { page: 'login' | 'register'; navigat
     }, 350)
   }
   return <main className="auth-page">
-    <div className="auth-top"><Brand /><span className="tiny-label">你的研究，从这里开始</span></div>
-    <section className="auth-card" aria-labelledby="auth-title">
+    <div className="auth-top"><Brand /></div>
+    <section className={`auth-card ${register ? 'register-card' : 'login-card'}`} aria-label={register ? '注册 EquityLens' : '登录 EquityLens'}>
       <Brand />
-      <div className="auth-heading"><h1 id="auth-title">{register ? '开启你的研究之旅' : '欢迎回来'}</h1><p>{register ? '创建账户，发现更清晰的市场视角。' : '登录 EquityLens，继续你的研究。'}</p></div>
+      {register && <div className="auth-heading"><h1>开启你的研究之旅</h1><p>创建账户，发现更清晰的市场视角。</p></div>}
       <form onSubmit={submit}>
         {register && <label className="field">用户名<input name="name" value={name} onChange={e => setName(e.target.value)} required minLength={2} maxLength={24} autoComplete="nickname" placeholder="怎么称呼你" /></label>}
         <label className="field">邮箱<input name="email" type="email" required autoComplete="email" placeholder="name@example.com" value={email} onChange={e => setEmail(e.target.value)} /></label>
@@ -82,9 +82,8 @@ function Auth({ page, navigate, onLogin }: { page: 'login' | 'register'; navigat
       <p className="auth-switch">{register ? '已经有账户？' : '还没有账户？'}<button onClick={() => navigate(register ? 'login' : 'register')}>{register ? '立即登录' : '注册账户'}</button></p>
       <div className="auth-divider"><span>或</span></div>
       <button className="demo-login" onClick={() => onLogin({ name: '研究员', email: 'demo@equitylens.local' })}>先体验一下 <ArrowRight size={15} /></button>
-      <p className="auth-demo-note">前端原型 · 无需使用真实账号信息</p>
     </section>
-    <footer className="auth-footer"><span>© {new Date().getFullYear()} EquityLens</span><span>让每一次研究，都有据可循。</span></footer>
+    <footer className="auth-footer"><span>© {new Date().getFullYear()} EquityLens · Designed &amp; Developed by wush</span><span>让每一次研究，都有据可循。</span></footer>
   </main>
 }
 

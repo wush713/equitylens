@@ -43,10 +43,10 @@ svg { flex-shrink: 0; stroke-width: 1.7; }
 .auth-top { position: absolute; top: 31px; left: 39px; right: 39px; display: flex; justify-content: space-between; align-items: center; }
 .auth-top .brand { font-size: 19px; }
 .auth-top .logo-mark { width: 30px; height: 30px; }
-.tiny-label { color: #8f9aab; font-size: 12px; letter-spacing: 1px; }
 .auth-card { width: 416px; max-width: 100%; background: #fff; border: 1px solid #e9edf3; padding: 38px 38px 28px; border-radius: 18px; box-shadow: 0 8px 35px #18395e04, 0 2px 5px #18395e02; }
 .auth-card > .brand { font-size: 24px; gap: 11px; }
 .auth-card > .brand .logo-mark { width: 37px; height: 37px; }
+.login-card > form { margin-top: 25px; }
 .auth-heading { margin: 29px 0 27px; }
 .auth-heading h1 { font-size: 24px; font-weight: 600; letter-spacing: -.7px; }
 .auth-heading p { margin-top: 10px; font-size: 12px; color: #8a94a3; line-height: 1.7; }
@@ -66,7 +66,6 @@ svg { flex-shrink: 0; stroke-width: 1.7; }
 .auth-divider::before, .auth-divider::after { content: ''; height: 1px; flex: 1; background: #edf0f5; }
 .demo-login { height: 37px; width: 100%; border: 1px solid #e6ebf2; display: flex; justify-content: center; align-items: center; gap: 10px; border-radius: 8px; font-size: 12px; color: #687991; }
 .demo-login:hover { color: var(--blue); background: #f6f9ff; border-color: #d1e3fb; }
-.auth-demo-note { font-size: 10px; color: #a9b1bd; text-align: center; margin-top: 16px; }
 .auth-footer { position: absolute; bottom: 28px; left: 39px; right: 39px; display: flex; justify-content: space-between; color: #a4adbb; font-size: 11px; }
 
 /* Floating navigation and workspace */
@@ -517,9 +516,8 @@ th,
   .drawer-intro { margin-top: 13px; }
   .drawer-content { margin-top: 25px; }
   .auth-top { top: 25px; left: 24px; right: 24px; }
-  .auth-top .tiny-label { display: none; }
   .auth-card { padding: 31px 28px 25px; }
-  .auth-footer { left: 24px; right: 24px; font-size: 12px; }
+  .auth-footer { left: 24px; right: 24px; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; }
 }
 @media (max-width: 410px) {
   .floating-nav { padding: 0 11px; }
